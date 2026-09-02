@@ -37,7 +37,12 @@ func (c *CreateShortLinkUseCase) CreateShortLink (
 		return nil, errors.New("original url cannot be empty")
 	}
 
-	shortCode, err := c.shortCodeGenerator.GenerateRandom(8)
+	codeValue, err := c.linkRepo.NextCodeValue()
+	if err != nil {
+		return nil, err
+	}
+
+	shortCode, err := c.shortCodeGenerator.GenerateUnique(codeValue, 5)
 	if err != nil {
 		return nil, err
 	}
