@@ -36,6 +36,8 @@ func main() {
 				"user_id": c.GetString("user_id"),
 			})
 		})
+
+		protected.POST("/links", app.Link.CreateLinkController.Create)
 	}
 
 	log.Println("Server running on :8080")
