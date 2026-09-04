@@ -6,6 +6,7 @@ import(
 
 type Container struct {
 	User *UserContainer
+	Link *LinkContainer
 }
 
 func NewContainer() (*Container, error) {
@@ -20,7 +21,13 @@ func NewContainer() (*Container, error) {
 		return nil, err
 	}
 
+	linkContainer, err := NewLinkContainer(db)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Container{
 		User: userContainer,
+		Link: linkContainer,
 	}, nil
 }
