@@ -2,6 +2,7 @@ package link
 
 import(
 	"time"
+	"url-shortener/application/link/dto"
 )
 
 type Link struct {
@@ -103,4 +104,14 @@ func (l *Link) IsAvailable(now time.Time) bool {
 	}
 
 	return true
+}
+
+func (l *Link) ToResponse() dto.LinkResponse {
+	return dto.LinkResponse{
+		ID:          *l.id,
+		OriginalURL: l.originalURL,
+		ShortCode:   l.shortCode,
+		CreatedAt:   l.createdAt.Format(time.RFC3339),
+		IsActive:    l.isActive,
+	}
 }
