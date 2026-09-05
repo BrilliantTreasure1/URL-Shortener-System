@@ -14,6 +14,7 @@ type LinkContainer struct {
 	CreateLinkController  *controllerLink.CreateLinkController
 	ResolveLinkController *controllerLink.ResolveLinkController
 	ListLinkController    *controllerLink.ListLinkController
+	DisableLinkController *controllerLink.DisableLinkController
 }
 
 func NewLinkContainer(db *sql.DB) (*LinkContainer, error) {
@@ -46,9 +47,18 @@ func NewLinkContainer(db *sql.DB) (*LinkContainer, error) {
 		*listShortLinkUseCase,
 	)
 
+	disableShortLinkUseCase := applicationLink.NewDisableShortLinkUseCase(
+		linkRepository,
+	)
+
+	disableLinkController := controllerLink.NewDisableLinkController(
+		*disableShortLinkUseCase,
+	)
+
 	return &LinkContainer{
 		CreateLinkController:  createLinkController,
 		ResolveLinkController: resolveLinkController,
 		ListLinkController:    listLinkController,
+		DisableLinkController: disableLinkController,
 	}, nil
 }
