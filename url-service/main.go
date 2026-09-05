@@ -44,6 +44,7 @@ func main() {
 
 		protected.POST("/links", app.Link.CreateLinkController.Create)
 		protected.GET("/links", app.Link.ListLinkController.List)
+		protected.PATCH("/links/:short_code", app.Link.DisableLinkController.Disable)
 	}
 
 	log.Println("Server running on :8080")
