@@ -1,7 +1,8 @@
 package container
 
-import(
+import (
 	"url-shortener/config"
+	"url-shortener/database"
 )
 
 type Container struct {
@@ -11,8 +12,13 @@ type Container struct {
 
 func NewContainer() (*Container, error) {
 
-		db, err := config.NewDatabase()
+	db, err := config.NewDatabase()
 	if err != nil {
+		return nil, err
+	}
+
+	if err := database.Migrate(db); err != nil {
+		db.Close()
 		return nil, err
 	}
 
