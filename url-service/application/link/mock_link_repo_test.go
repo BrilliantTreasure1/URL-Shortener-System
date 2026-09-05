@@ -23,6 +23,14 @@ type mockLinkRepo struct {
 	calledDisable        bool
 	callDisableUserID    int
 	callDisableShortCode string
+
+	listLinks      []*entities.Link
+	listTotal      int64
+	listErr        error
+	calledList     bool
+	callListUserID int
+	callListOffset int
+	callListLimit  int
 }
 
 func (m *mockLinkRepo) Create(l *entities.Link) (*entities.Link, error) {
@@ -41,7 +49,11 @@ func (m *mockLinkRepo) FindByShortCode(shortCode string) (*entities.Link, error)
 }
 
 func (m *mockLinkRepo) ListByUserID(userID int, offset int, limit int) ([]*entities.Link, int64, error) {
-	return []*entities.Link{}, 0, nil
+	m.calledList = true
+	m.callListUserID = userID
+	m.callListOffset = offset
+	m.callListLimit = limit
+	return m.listLinks, m.listTotal, m.listErr
 }
 
 func (m *mockLinkRepo) DisableLink(userID int, shortCode string) (*entities.Link, error) {
