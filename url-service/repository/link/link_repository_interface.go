@@ -6,5 +6,5 @@ type LinkRepository interface {
 	Create(link *entities.Link) (*entities.Link, error)
 	NextCodeValue() (int64, error)
 	FindByShortCode(shortCode string) (*entities.Link , error)
-	FindByUserID(userID int, offset int, limit int) ([]*entities.Link, int64, error)
+	ListByUserID(userID int, offset int, limit int) ([]*entities.Link, int64, error)
 }

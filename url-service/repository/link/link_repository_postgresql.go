@@ -157,7 +157,7 @@ func (r *LinkRepositoryPostgresql) FindByShortCode(shortCode string) (*entities.
 	)
 }
 
-func (r *LinkRepositoryPostgresql) FindByUserID(userID int, offset int, limit int) ([]*entities.Link, int64, error) {
+func (r *LinkRepositoryPostgresql) ListByUserID(userID int, offset int, limit int) ([]*entities.Link, int64, error) {
 
 	query := `
 		SELECT

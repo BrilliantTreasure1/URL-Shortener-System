@@ -31,7 +31,7 @@ func (l *ListShortLinkUseCase) ListShortLink(userID int, offset int, limit int) 
 		return nil, 0, errors.New("limit must be greater than zero")
 	}
 
-	links, total, err := l.linkRepo.FindByUserID(userID, offset, limit)
+	links, total, err := l.linkRepo.ListByUserID(userID, offset, limit)
 	if err != nil {
 		return nil, 0, err
 	}
