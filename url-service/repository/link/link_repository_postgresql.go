@@ -248,3 +248,110 @@ func (r *LinkRepositoryPostgresql) ListByUserID(userID int, offset int, limit in
 
 	return links, total, nil
 }
+
+func (r *LinkRepositoryPostgresql) DisableLink(userID int, shortCode string) (*entities.Link, error) {
+
+	query := `
+		UPDATE links
+		SET is_active = false
+		WHERE user_id = $1 AND short_code = $2 AND is_active = true
+		RETURNING
+			id,
+			user_id,
+			original_url,
+			short_code,
+			created_at,
+			expires_at,
+			is_active
+	`
+
+	var (
+		id          int
+		userIDDB    int
+		originalURL string
+		shortCodeDB string
+		createdAt   time.Time
+		expiresAt   sql.NullTime
+		isActive    bool
+	)
+
+	err := r.db.QueryRow(query, userID, shortCode).Scan(
+		&id,
+		&userIDDB,
+		&originalURL,
+		&shortCodeDB,
+		&createdAt,
+		&expiresAt,
+		&isActive,
+	)
+
+	if err == sql.ErrNoRows {
+		return r.handleDisableFallback(userID, shortCode)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	var expiresAtPtr *time.Time
+	if expiresAt.Valid {
+		t := expiresAt.Time
+		expiresAtPtr = &t
+	}
+
+	return entities.NewLinkFromDatabase(
+		&id,
+		userIDDB,
+		originalURL,
+		shortCodeDB,
+		createdAt,
+		expiresAtPtr,
+		isActive,
+	)
+}
+
+func (r *LinkRepositoryPostgresql) handleDisableFallback(userID int, shortCode string) (*entities.Link, error) {
+
+	query := `
+		SELECT
+			id,
+			user_id,
+			original_url,
+			short_code,
+			created_at,
+			expires_at,
+			is_active
+		FROM links
+		WHERE user_id = $1 AND short_code = $2
+	`
+
+	var (
+		id          int
+		userIDDB    int
+		originalURL string
+		shortCodeDB string
+		createdAt   time.Time
+		expiresAt   sql.NullTime
+		isActive    bool
+	)
+
+	err := r.db.QueryRow(query, userID, shortCode).Scan(
+		&id,
+		&userIDDB,
+		&originalURL,
+		&shortCodeDB,
+		&createdAt,
+		&expiresAt,
+		&isActive,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return nil, ErrLinkAlreadyDisabled
+}
