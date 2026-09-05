@@ -27,6 +27,11 @@ func main() {
 		app.User.UserLoginController.Login,
 	)
 
+	router.GET(
+		"/:short_code",
+		app.Link.ResolveLinkController.Resolve,
+	)
+
 	protected := router.Group("/")
 	protected.Use(middleware.AuthMiddleware())
 	{
