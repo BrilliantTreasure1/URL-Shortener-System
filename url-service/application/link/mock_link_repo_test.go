@@ -6,17 +6,23 @@ import (
 )
 
 type mockLinkRepo struct {
-	createLink *entities.Link
-	createErr  error
+	createLink   *entities.Link
+	createErr    error
 	calledCreate bool
 
-	nextValue int64
-	nextErr   error
+	nextValue  int64
+	nextErr    error
 	calledNext bool
 
-	findByShortCodeLink *entities.Link
-	findByShortCodeErr  error
+	findByShortCodeLink   *entities.Link
+	findByShortCodeErr    error
 	calledFindByShortCode bool
+
+	disableLink          *entities.Link
+	disableErr           error
+	calledDisable        bool
+	callDisableUserID    int
+	callDisableShortCode string
 }
 
 func (m *mockLinkRepo) Create(l *entities.Link) (*entities.Link, error) {
@@ -39,7 +45,10 @@ func (m *mockLinkRepo) ListByUserID(userID int, offset int, limit int) ([]*entit
 }
 
 func (m *mockLinkRepo) DisableLink(userID int, shortCode string) (*entities.Link, error) {
-	return nil, nil
+	m.calledDisable = true
+	m.callDisableUserID = userID
+	m.callDisableShortCode = shortCode
+	return m.disableLink, m.disableErr
 }
 
 var _ linkRepo.LinkRepository = (*mockLinkRepo)(nil)

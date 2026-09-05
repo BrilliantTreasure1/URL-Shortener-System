@@ -3,22 +3,19 @@ package link
 import (
 	"errors"
 	"testing"
-	"time"
-
-	entities "url-shortener/entities/link"
 )
 
 func TestResolveShortLink(t *testing.T) {
 	repoErr := errors.New("repository failed")
 
 	tests := []struct {
-		name            string
-		shortCode       string
-		repo            *mockLinkRepo
-		wantErr         string
-		wantShortCode   string
-		wantOrigURL     string
-		wantFindCalled  bool
+		name           string
+		shortCode      string
+		repo           *mockLinkRepo
+		wantErr        string
+		wantShortCode  string
+		wantOrigURL    string
+		wantFindCalled bool
 	}{
 		{
 			name:      "finds link",
@@ -34,9 +31,9 @@ func TestResolveShortLink(t *testing.T) {
 			wantFindCalled: true,
 		},
 		{
-			name:      "link doesn't exist",
-			shortCode: "nope",
-			repo: &mockLinkRepo{},
+			name:           "link doesn't exist",
+			shortCode:      "nope",
+			repo:           &mockLinkRepo{},
 			wantErr:        "link not found",
 			wantFindCalled: true,
 		},
@@ -73,9 +70,9 @@ func TestResolveShortLink(t *testing.T) {
 			wantFindCalled: true,
 		},
 		{
-			name:      "short code empty",
-			shortCode: "",
-			repo:      &mockLinkRepo{},
+			name:           "short code empty",
+			shortCode:      "",
+			repo:           &mockLinkRepo{},
 			wantErr:        "short code cannot be empty",
 			wantFindCalled: false,
 		},
@@ -114,32 +111,4 @@ func TestResolveShortLink(t *testing.T) {
 			}
 		})
 	}
-}
-
-func pastTime() *time.Time {
-	t := time.Now().Add(-time.Hour)
-	return &t
-}
-
-func newLinkWithState(
-	id int,
-	userID int,
-	originalURL string,
-	shortCode string,
-	isActive bool,
-	expiresAt *time.Time,
-) *entities.Link {
-	link, err := entities.NewLinkFromDatabase(
-		&id,
-		userID,
-		originalURL,
-		shortCode,
-		time.Now(),
-		expiresAt,
-		isActive,
-	)
-	if err != nil {
-		panic(err)
-	}
-	return link
 }
