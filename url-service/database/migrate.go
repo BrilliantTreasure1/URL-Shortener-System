@@ -27,6 +27,8 @@ func Migrate(db *sql.DB) error {
 			expires_at TIMESTAMPTZ,
 			is_active BOOLEAN NOT NULL DEFAULT TRUE
 		)`,
+
+		`CREATE INDEX IF NOT EXISTS idx_links_user_id ON links(user_id)`,
 	}
 
 	for _, query := range queries {
