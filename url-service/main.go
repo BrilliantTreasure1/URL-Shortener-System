@@ -43,6 +43,7 @@ func main() {
 		})
 
 		protected.POST("/links", app.Link.CreateLinkController.Create)
+		protected.GET("/links", app.Link.ListLinkController.List)
 	}
 
 	log.Println("Server running on :8080")
