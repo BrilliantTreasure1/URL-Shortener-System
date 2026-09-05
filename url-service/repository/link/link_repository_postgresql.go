@@ -156,3 +156,95 @@ func (r *LinkRepositoryPostgresql) FindByShortCode(shortCode string) (*entities.
 		isActive,
 	)
 }
+
+func (r *LinkRepositoryPostgresql) FindByUserID(userID int, offset int, limit int) ([]*entities.Link, int64, error) {
+
+	query := `
+		SELECT
+			id,
+			user_id,
+			original_url,
+			short_code,
+			created_at,
+			expires_at,
+			is_active,
+			COUNT(*) OVER() AS total
+		FROM links
+		WHERE user_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	rows, err := r.db.Query(query, userID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var (
+		links []*entities.Link
+		total int64
+	)
+
+	for rows.Next() {
+		var (
+			id          int
+			userIDDB    int
+			originalURL string
+			shortCode   string
+			createdAt   time.Time
+			expiresAt   sql.NullTime
+			isActive    bool
+			rowTotal    int64
+		)
+
+		err := rows.Scan(
+			&id,
+			&userIDDB,
+			&originalURL,
+			&shortCode,
+			&createdAt,
+			&expiresAt,
+			&isActive,
+			&rowTotal,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		if total == 0 {
+			total = rowTotal
+		}
+
+		var expiresAtPtr *time.Time
+		if expiresAt.Valid {
+			t := expiresAt.Time
+			expiresAtPtr = &t
+		}
+
+		link, err := entities.NewLinkFromDatabase(
+			&id,
+			userIDDB,
+			originalURL,
+			shortCode,
+			createdAt,
+			expiresAtPtr,
+			isActive,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		links = append(links, link)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	if links == nil {
+		links = []*entities.Link{}
+	}
+
+	return links, total, nil
+}
