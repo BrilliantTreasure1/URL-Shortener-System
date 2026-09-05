@@ -95,3 +95,64 @@ func (r *LinkRepositoryPostgresql) NextCodeValue() (int64, error) {
 
 	return value, nil
 }
+
+	
+func (r *LinkRepositoryPostgresql) FindByShortCode(shortCode string) (*entities.Link, error) {
+
+	query := `
+		SELECT
+			id,
+			user_id,
+			original_url,
+			short_code,
+			created_at,
+			expires_at,
+			is_active
+		FROM links
+		WHERE short_code = $1
+	`
+
+	var (
+		id          int
+		userID      int
+		originalURL string
+		shortCodeDB string
+		createdAt   time.Time
+		expiresAt   sql.NullTime
+		isActive    bool
+	)
+
+	err := r.db.QueryRow(query, shortCode).Scan(
+		&id,
+		&userID,
+		&originalURL,
+		&shortCodeDB,
+		&createdAt,
+		&expiresAt,
+		&isActive,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	var expiresAtPtr *time.Time
+	if expiresAt.Valid {
+		t := expiresAt.Time
+		expiresAtPtr = &t
+	}
+
+	return entities.NewLinkFromDatabase(
+		&id,
+		userID,
+		originalURL,
+		shortCodeDB,
+		createdAt,
+		expiresAtPtr,
+		isActive,
+	)
+}
