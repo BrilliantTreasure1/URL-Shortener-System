@@ -6,7 +6,6 @@ import (
 	"time"
 
 	entities "url-shortener/entities/link"
-	linkRepo "url-shortener/repository/link"
 )
 
 type mockGenerator struct {
@@ -23,39 +22,6 @@ func (m *mockGenerator) GenerateUnique(seq int64, randomLength int) (string, err
 	m.calledLen = randomLength
 	m.callCount++
 	return m.code, m.err
-}
-
-type mockLinkRepo struct {
-	nextValue int64
-	nextErr   error
-
-	createLink *entities.Link
-	createErr  error
-
-	calledNext   bool
-	calledCreate bool
-}
-
-func (m *mockLinkRepo) Create(l *entities.Link) (*entities.Link, error) {
-	m.calledCreate = true
-	return m.createLink, m.createErr
-}
-
-func (m *mockLinkRepo) NextCodeValue() (int64, error) {
-	m.calledNext = true
-	return m.nextValue, m.nextErr
-}
-
-func (m *mockLinkRepo) FindByShortCode(shortCode string) (*entities.Link, error) {
-	return nil, nil
-}
-
-func (m *mockLinkRepo) ListByUserID(userID int, offset int, limit int) ([]*entities.Link, int64, error) {
-	return []*entities.Link{}, 0, nil
-}
-
-func (m *mockLinkRepo) DisableLink(userID int, shortCode string) (*entities.Link, error) {
-	return nil, nil
 }
 
 func TestCreateShortLink(t *testing.T) {
@@ -210,5 +176,3 @@ func mustLink(id int, userID int, originalURL string, shortCode string) *entitie
 	}
 	return link
 }
-
-var _ linkRepo.LinkRepository = (*mockLinkRepo)(nil)
