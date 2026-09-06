@@ -1,13 +1,18 @@
 package container
 
 import (
+	"log"
+
 	"url-shortener/config"
 	"url-shortener/database"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type Container struct {
-	User *UserContainer
-	Link *LinkContainer
+	User  *UserContainer
+	Link  *LinkContainer
+	Redis *redis.Client
 }
 
 func NewContainer() (*Container, error) {
@@ -22,6 +27,12 @@ func NewContainer() (*Container, error) {
 		return nil, err
 	}
 
+	redisClient, err := config.NewRedisClient()
+	if err != nil {
+		log.Printf("warn: redis unavailable, continuing without cache: %v", err)
+		redisClient = nil
+	}
+
 	userContainer, err := NewUserContainer(db)
 	if err != nil {
 		return nil, err
@@ -33,7 +44,8 @@ func NewContainer() (*Container, error) {
 	}
 
 	return &Container{
-		User: userContainer,
-		Link: linkContainer,
+		User:  userContainer,
+		Link:  linkContainer,
+		Redis: redisClient,
 	}, nil
 }
