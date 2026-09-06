@@ -3,10 +3,22 @@ package config
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
+
+const defaultCacheTTL = 3600
+
+func NewCacheTTL() time.Duration {
+	seconds, err := strconv.Atoi(getEnv("CACHETTL", strconv.Itoa(defaultCacheTTL)))
+	if err != nil || seconds <= 0 {
+		return defaultCacheTTL * time.Second
+	}
+
+	return time.Duration(seconds) * time.Second
+}
 
 func NewRedisClient() (*redis.Client, error) {
 
