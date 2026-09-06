@@ -38,7 +38,7 @@ func NewContainer() (*Container, error) {
 		return nil, err
 	}
 
-	linkContainer, err := NewLinkContainer(db)
+	linkContainer, err := NewLinkContainer(db, redisClient, config.NewCacheTTL())
 	if err != nil {
 		return nil, err
 	}

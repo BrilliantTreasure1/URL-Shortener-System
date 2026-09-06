@@ -3,11 +3,15 @@ package container
 import (
 
 	"database/sql"
+	"time"
 
 	applicationLink "url-shortener/application/link"
 	controllerLink "url-shortener/controller/link"
 	repositoryLink "url-shortener/repository/link"
+	repositoryCache "url-shortener/repository/cache"
 	"url-shortener/service/shortcode-generator"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type LinkContainer struct {
@@ -17,10 +21,12 @@ type LinkContainer struct {
 	DisableLinkController *controllerLink.DisableLinkController
 }
 
-func NewLinkContainer(db *sql.DB) (*LinkContainer, error) {
+func NewLinkContainer(db *sql.DB, redisClient *redis.Client, cacheTTL time.Duration) (*LinkContainer, error) {
 
 	linkRepository := repositoryLink.NewLinkRepositoryPostgresql(db)
 	shortcodeGenerator := shortcodegenerator.NewUniqueGenerator()
+
+	linkCache := repositoryCache.NewRedisLinkCache(redisClient, cacheTTL)
 
 	createShortLinkUseCase := applicationLink.NewCreateShortLinkUseCase(
 		shortcodeGenerator,
@@ -33,6 +39,7 @@ func NewLinkContainer(db *sql.DB) (*LinkContainer, error) {
 
 	resolveShortLinkUseCase := applicationLink.NewResolveShortLinkUseCase(
 		linkRepository,
+		linkCache,
 	)
 
 	resolveLinkController := controllerLink.NewResolveLinkController(
@@ -49,6 +56,7 @@ func NewLinkContainer(db *sql.DB) (*LinkContainer, error) {
 
 	disableShortLinkUseCase := applicationLink.NewDisableShortLinkUseCase(
 		linkRepository,
+		linkCache,
 	)
 
 	disableLinkController := controllerLink.NewDisableLinkController(
