@@ -3,6 +3,8 @@ package link
 import (
 	"errors"
 	"testing"
+
+	linkCache "url-shortener/repository/cache"
 )
 
 func TestResolveShortLink(t *testing.T) {
@@ -12,10 +14,13 @@ func TestResolveShortLink(t *testing.T) {
 		name           string
 		shortCode      string
 		repo           *mockLinkRepo
+		cache          *mockLinkCache
 		wantErr        string
 		wantShortCode  string
 		wantOrigURL    string
 		wantFindCalled bool
+		wantSet        bool
+		wantSetURL     string
 	}{
 		{
 			name:      "finds link",
@@ -25,6 +30,73 @@ func TestResolveShortLink(t *testing.T) {
 					10, 1, "https://example.com", "abc123",
 				),
 			},
+			cache:          &mockLinkCache{},
+			wantErr:        "",
+			wantShortCode:  "abc123",
+			wantOrigURL:    "https://example.com",
+			wantFindCalled: true,
+			wantSet:        true,
+			wantSetURL:     "https://example.com",
+		},
+		{
+			name:      "serves from cache",
+			shortCode: "abc123",
+			repo:      &mockLinkRepo{},
+			cache: &mockLinkCache{
+				hitURL:   "https://cached.example.com",
+				hitFound: true,
+			},
+			wantErr:        "",
+			wantShortCode:  "abc123",
+			wantOrigURL:    "https://cached.example.com",
+			wantFindCalled: false,
+			wantSet:        false,
+		},
+		{
+			name:      "cache unavailable falls back to db",
+			shortCode: "abc123",
+			repo: &mockLinkRepo{
+				findByShortCodeLink: mustLink(
+					10, 1, "https://example.com", "abc123",
+				),
+			},
+			cache: &mockLinkCache{
+				hitErr: linkCache.ErrCacheUnavailable,
+			},
+			wantErr:        "",
+			wantShortCode:  "abc123",
+			wantOrigURL:    "https://example.com",
+			wantFindCalled: true,
+			wantSet:        true,
+			wantSetURL:     "https://example.com",
+		},
+		{
+			name:      "set failure ignored",
+			shortCode: "abc123",
+			repo: &mockLinkRepo{
+				findByShortCodeLink: mustLink(
+					10, 1, "https://example.com", "abc123",
+				),
+			},
+			cache: &mockLinkCache{
+				setErr: errors.New("cache set failed"),
+			},
+			wantErr:        "",
+			wantShortCode:  "abc123",
+			wantOrigURL:    "https://example.com",
+			wantFindCalled: true,
+			wantSet:        true,
+			wantSetURL:     "https://example.com",
+		},
+		{
+			name:      "no cache configured",
+			shortCode: "abc123",
+			repo: &mockLinkRepo{
+				findByShortCodeLink: mustLink(
+					10, 1, "https://example.com", "abc123",
+				),
+			},
+			cache:          nil,
 			wantErr:        "",
 			wantShortCode:  "abc123",
 			wantOrigURL:    "https://example.com",
@@ -34,6 +106,7 @@ func TestResolveShortLink(t *testing.T) {
 			name:           "link doesn't exist",
 			shortCode:      "nope",
 			repo:           &mockLinkRepo{},
+			cache:          &mockLinkCache{},
 			wantErr:        "link not found",
 			wantFindCalled: true,
 		},
@@ -45,6 +118,7 @@ func TestResolveShortLink(t *testing.T) {
 					10, 1, "https://example.com", "abc123", false, nil,
 				),
 			},
+			cache:          &mockLinkCache{},
 			wantErr:        "link is not available",
 			wantFindCalled: true,
 		},
@@ -57,6 +131,7 @@ func TestResolveShortLink(t *testing.T) {
 					pastTime(),
 				),
 			},
+			cache:          &mockLinkCache{},
 			wantErr:        "link is not available",
 			wantFindCalled: true,
 		},
@@ -66,6 +141,7 @@ func TestResolveShortLink(t *testing.T) {
 			repo: &mockLinkRepo{
 				findByShortCodeErr: repoErr,
 			},
+			cache:          &mockLinkCache{},
 			wantErr:        "repository failed",
 			wantFindCalled: true,
 		},
@@ -73,6 +149,7 @@ func TestResolveShortLink(t *testing.T) {
 			name:           "short code empty",
 			shortCode:      "",
 			repo:           &mockLinkRepo{},
+			cache:          &mockLinkCache{},
 			wantErr:        "short code cannot be empty",
 			wantFindCalled: false,
 		},
@@ -80,7 +157,12 @@ func TestResolveShortLink(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewResolveShortLinkUseCase(tt.repo)
+			var cache linkCache.LinkCache
+			if tt.cache != nil {
+				cache = tt.cache
+			}
+
+			uc := NewResolveShortLinkUseCase(tt.repo, cache)
 
 			link, err := uc.ResolveShortLink(tt.shortCode)
 
@@ -108,6 +190,18 @@ func TestResolveShortLink(t *testing.T) {
 
 			if tt.repo.calledFindByShortCode != tt.wantFindCalled {
 				t.Errorf("expected repo.FindByShortCode called = %v, got %v", tt.wantFindCalled, tt.repo.calledFindByShortCode)
+			}
+
+			if tt.cache != nil {
+				if tt.cache.calledSet != tt.wantSet {
+					t.Errorf("expected cache.Set called = %v, got %v", tt.wantSet, tt.cache.calledSet)
+				}
+				if tt.wantSetURL != "" && tt.cache.setURL != tt.wantSetURL {
+					t.Errorf("expected cache.Set url %q, got %q", tt.wantSetURL, tt.cache.setURL)
+				}
+				if tt.wantSet && tt.cache.setCode != tt.shortCode {
+					t.Errorf("expected cache.Set short code %q, got %q", tt.shortCode, tt.cache.setCode)
+				}
 			}
 		})
 	}
