@@ -5,17 +5,20 @@ import (
 
 	entities "url-shortener/entities/link"
 	linkRepo "url-shortener/repository/link"
+	linkCache "url-shortener/repository/cache"
 )
 
 var ErrLinkAlreadyDisabled = errors.New("link is already disabled")
 
 type DisableShortLinkUseCase struct {
 	linkRepo linkRepo.LinkRepository
+	cache    linkCache.LinkCache
 }
 
-func NewDisableShortLinkUseCase(linkRepo linkRepo.LinkRepository) *DisableShortLinkUseCase {
+func NewDisableShortLinkUseCase(linkRepo linkRepo.LinkRepository, cache linkCache.LinkCache) *DisableShortLinkUseCase {
 	return &DisableShortLinkUseCase{
 		linkRepo: linkRepo,
+		cache:    cache,
 	}
 }
 
@@ -39,6 +42,10 @@ func (d *DisableShortLinkUseCase) DisableShortLink(userID int, shortCode string)
 
 	if link == nil {
 		return nil, errors.New("link not found")
+	}
+
+	if d.cache != nil {
+		_ = d.cache.Delete(shortCode)
 	}
 
 	return link, nil
