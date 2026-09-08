@@ -2,10 +2,13 @@ package cache
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	entities "url-shortener/entities/link"
 )
 
 type RedisLinkCache struct {
@@ -22,28 +25,38 @@ func NewRedisLinkCache(client *redis.Client, ttl time.Duration) *RedisLinkCache 
 	}
 }
 
-func (r *RedisLinkCache) Get(shortCode string) (string, bool, error) {
+func (r *RedisLinkCache) Get(shortCode string) (*entities.Link, bool, error) {
 	if r.client == nil {
-		return "", false, ErrCacheUnavailable
+		return nil, false, ErrCacheUnavailable
 	}
 
 	val, err := r.client.Get(context.Background(), cacheKeyPrefix+shortCode).Result()
 	if err == redis.Nil {
-		return "", false, nil
+		return nil, false, nil
 	}
 	if err != nil {
-		return "", false, ErrCacheUnavailable
+		return nil, false, ErrCacheUnavailable
 	}
 
-	return val, true, nil
+	var link entities.Link
+	if err := json.Unmarshal([]byte(val), &link); err != nil {
+		return nil, false, nil
+	}
+
+	return &link, true, nil
 }
 
-func (r *RedisLinkCache) Set(shortCode, originalURL string) error {
+func (r *RedisLinkCache) Set(link *entities.Link) error {
 	if r.client == nil {
 		return ErrCacheUnavailable
 	}
 
-	if err := r.client.Set(context.Background(), cacheKeyPrefix+shortCode, originalURL, r.ttl).Err(); err != nil {
+	val, err := json.Marshal(link)
+	if err != nil {
+		return fmt.Errorf("cache marshal failed: %w", err)
+	}
+
+	if err := r.client.Set(context.Background(), cacheKeyPrefix+link.ShortCode(), val, r.ttl).Err(); err != nil {
 		return fmt.Errorf("cache set failed: %w", err)
 	}
 
