@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -17,7 +19,11 @@ func NewRabbitMQConnection() (*amqp.Connection, error) {
 		getEnv("RABBITMQVHOST", ""),
 	)
 
-	connection, err := amqp.Dial(amqpURL)
+	connection, err := amqp.DialConfig(amqpURL, amqp.Config{
+		Dial: (&net.Dialer{
+			Timeout: 5 * time.Second,
+		}).Dial,
+	})
 	if err != nil {
 		return nil, err
 	}
