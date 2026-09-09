@@ -16,6 +16,14 @@ type RedisLinkCache struct {
 	ttl    time.Duration
 }
 
+type cachedLink struct {
+	UserID      int        `json:"user_id"`
+	ShortCode   string     `json:"short_code"`
+	OriginalURL string     `json:"original_url"`
+	ExpiresAt   *time.Time `json:"expires_at"`
+	IsActive    bool       `json:"is_active"`
+}
+
 const cacheKeyPrefix = "link:"
 
 func NewRedisLinkCache(client *redis.Client, ttl time.Duration) *RedisLinkCache {
@@ -38,12 +46,22 @@ func (r *RedisLinkCache) Get(shortCode string) (*entities.Link, bool, error) {
 		return nil, false, ErrCacheUnavailable
 	}
 
-	var link entities.Link
-	if err := json.Unmarshal([]byte(val), &link); err != nil {
+	var rec cachedLink
+	if err := json.Unmarshal([]byte(val), &rec); err != nil {
 		return nil, false, nil
 	}
 
-	return &link, true, nil
+	link, _ := entities.NewLinkWithState(
+		nil,
+		rec.UserID,
+		rec.OriginalURL,
+		rec.ShortCode,
+		time.Time{},
+		rec.ExpiresAt,
+		rec.IsActive,
+	)
+
+	return link, true, nil
 }
 
 func (r *RedisLinkCache) Set(link *entities.Link) error {
@@ -51,7 +69,15 @@ func (r *RedisLinkCache) Set(link *entities.Link) error {
 		return ErrCacheUnavailable
 	}
 
-	val, err := json.Marshal(link)
+	rec := cachedLink{
+		UserID:      link.UserID(),
+		ShortCode:   link.ShortCode(),
+		OriginalURL: link.OriginalURL(),
+		ExpiresAt:   link.ExpiresAt(),
+		IsActive:    link.IsActive(),
+	}
+
+	val, err := json.Marshal(rec)
 	if err != nil {
 		return fmt.Errorf("cache marshal failed: %w", err)
 	}
