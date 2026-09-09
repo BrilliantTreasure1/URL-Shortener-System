@@ -1,8 +1,8 @@
 package link
 
 import (
-	"encoding/json"
 	"time"
+
 	"url-shortener/application/link/dto"
 )
 
@@ -33,7 +33,7 @@ func NewLink(
 	} , nil
 }
 
-func NewLinkFromDatabase(
+func NewLinkWithState(
 	id *int,
 	userID int,
 	originalURL string,
@@ -115,43 +115,4 @@ func (l *Link) ToResponse() dto.LinkResponse {
 		CreatedAt:   l.createdAt.Format(time.RFC3339),
 		IsActive:    l.isActive,
 	}
-}
-
-type linkJSON struct {
-	ID          *int       `json:"id"`
-	UserID      int        `json:"user_id"`
-	OriginalURL string     `json:"original_url"`
-	ShortCode   string     `json:"short_code"`
-	CreatedAt   time.Time  `json:"created_at"`
-	ExpiresAt   *time.Time `json:"expires_at"`
-	IsActive    bool       `json:"is_active"`
-}
-
-func (l *Link) MarshalJSON() ([]byte, error) {
-	return json.Marshal(linkJSON{
-		ID:          l.id,
-		UserID:      l.userID,
-		OriginalURL: l.originalURL,
-		ShortCode:   l.shortCode,
-		CreatedAt:   l.createdAt,
-		ExpiresAt:   l.expiresAt,
-		IsActive:    l.isActive,
-	})
-}
-
-func (l *Link) UnmarshalJSON(data []byte) error {
-	var rec linkJSON
-	if err := json.Unmarshal(data, &rec); err != nil {
-		return err
-	}
-
-	l.id = rec.ID
-	l.userID = rec.UserID
-	l.originalURL = rec.OriginalURL
-	l.shortCode = rec.ShortCode
-	l.createdAt = rec.CreatedAt
-	l.expiresAt = rec.ExpiresAt
-	l.isActive = rec.IsActive
-
-	return nil
 }
