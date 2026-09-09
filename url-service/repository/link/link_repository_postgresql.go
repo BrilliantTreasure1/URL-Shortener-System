@@ -73,7 +73,7 @@ func (r *LinkRepositoryPostgresql) Create(
 		expiresAtPtr = &t
 	}
 
-	return entities.NewLinkFromDatabase(
+	return entities.NewLinkWithState(
 		&id,
 		userID,
 		originalURL,
@@ -146,7 +146,7 @@ func (r *LinkRepositoryPostgresql) FindByShortCode(shortCode string) (*entities.
 		expiresAtPtr = &t
 	}
 
-	return entities.NewLinkFromDatabase(
+	return entities.NewLinkWithState(
 		&id,
 		userID,
 		originalURL,
@@ -222,7 +222,7 @@ func (r *LinkRepositoryPostgresql) ListByUserID(userID int, offset int, limit in
 			expiresAtPtr = &t
 		}
 
-		link, err := entities.NewLinkFromDatabase(
+		link, err := entities.NewLinkWithState(
 			&id,
 			userIDDB,
 			originalURL,
@@ -299,7 +299,7 @@ func (r *LinkRepositoryPostgresql) DisableLink(userID int, shortCode string) (*e
 		expiresAtPtr = &t
 	}
 
-	return entities.NewLinkFromDatabase(
+	return entities.NewLinkWithState(
 		&id,
 		userIDDB,
 		originalURL,
