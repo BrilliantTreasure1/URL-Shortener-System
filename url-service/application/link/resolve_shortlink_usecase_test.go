@@ -1,9 +1,12 @@
 package link
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
+	linkDTO "url-shortener/application/link/dto"
+	messagequeue "url-shortener/message-queue"
 	linkCache "url-shortener/repository/cache"
 )
 
@@ -15,12 +18,14 @@ func TestResolveShortLink(t *testing.T) {
 		shortCode      string
 		repo           *mockLinkRepo
 		cache          *mockLinkCache
+		queue          *mockQueue
 		wantErr        string
 		wantShortCode  string
 		wantOrigURL    string
+		wantUserID     int
 		wantFindCalled bool
 		wantSet        bool
-		wantSetURL     string
+		wantPublish    bool
 	}{
 		{
 			name:      "finds link",
@@ -31,26 +36,55 @@ func TestResolveShortLink(t *testing.T) {
 				),
 			},
 			cache:          &mockLinkCache{},
+			queue:          &mockQueue{},
 			wantErr:        "",
 			wantShortCode:  "abc123",
 			wantOrigURL:    "https://example.com",
+			wantUserID:     1,
 			wantFindCalled: true,
 			wantSet:        true,
-			wantSetURL:     "https://example.com",
+			wantPublish:    true,
 		},
 		{
 			name:      "serves from cache",
 			shortCode: "abc123",
 			repo:      &mockLinkRepo{},
 			cache: &mockLinkCache{
-				hitURL:   "https://cached.example.com",
+				hitLink: mustLink(
+					10, 1, "https://cached.example.com", "abc123",
+				),
 				hitFound: true,
 			},
+			queue:       &mockQueue{},
+			wantErr:     "",
+			wantShortCode: "abc123",
+			wantOrigURL: "https://cached.example.com",
+			wantUserID:  1,
+			wantSet:     false,
+			wantPublish: true,
+		},
+		{
+			name:      "cached link unavailable falls back to db",
+			shortCode: "abc123",
+			repo: &mockLinkRepo{
+				findByShortCodeLink: mustLink(
+					10, 1, "https://example.com", "abc123",
+				),
+			},
+			cache: &mockLinkCache{
+				hitLink: newLinkWithState(
+					10, 1, "https://cached.example.com", "abc123", false, nil,
+				),
+				hitFound: true,
+			},
+			queue:          &mockQueue{},
 			wantErr:        "",
 			wantShortCode:  "abc123",
-			wantOrigURL:    "https://cached.example.com",
-			wantFindCalled: false,
-			wantSet:        false,
+			wantOrigURL:    "https://example.com",
+			wantUserID:     1,
+			wantFindCalled: true,
+			wantSet:        true,
+			wantPublish:    true,
 		},
 		{
 			name:      "cache unavailable falls back to db",
@@ -63,12 +97,14 @@ func TestResolveShortLink(t *testing.T) {
 			cache: &mockLinkCache{
 				hitErr: linkCache.ErrCacheUnavailable,
 			},
+			queue:          &mockQueue{},
 			wantErr:        "",
 			wantShortCode:  "abc123",
 			wantOrigURL:    "https://example.com",
+			wantUserID:     1,
 			wantFindCalled: true,
 			wantSet:        true,
-			wantSetURL:     "https://example.com",
+			wantPublish:    true,
 		},
 		{
 			name:      "set failure ignored",
@@ -81,32 +117,57 @@ func TestResolveShortLink(t *testing.T) {
 			cache: &mockLinkCache{
 				setErr: errors.New("cache set failed"),
 			},
+			queue:          &mockQueue{},
 			wantErr:        "",
 			wantShortCode:  "abc123",
 			wantOrigURL:    "https://example.com",
+			wantUserID:     1,
 			wantFindCalled: true,
 			wantSet:        true,
-			wantSetURL:     "https://example.com",
+			wantPublish:    true,
 		},
 		{
-			name:      "no cache configured",
+			name:      "publish failure ignored",
 			shortCode: "abc123",
 			repo: &mockLinkRepo{
 				findByShortCodeLink: mustLink(
 					10, 1, "https://example.com", "abc123",
 				),
 			},
-			cache:          nil,
+			cache:          &mockLinkCache{},
+			queue:          &mockQueue{publishErr: errors.New("publish failed")},
 			wantErr:        "",
 			wantShortCode:  "abc123",
 			wantOrigURL:    "https://example.com",
+			wantUserID:     1,
 			wantFindCalled: true,
+			wantSet:        true,
+			wantPublish:    true,
+		},
+		{
+			name:      "no queue configured",
+			shortCode: "abc123",
+			repo: &mockLinkRepo{
+				findByShortCodeLink: mustLink(
+					10, 1, "https://example.com", "abc123",
+				),
+			},
+			cache:          &mockLinkCache{},
+			queue:          nil,
+			wantErr:        "",
+			wantShortCode:  "abc123",
+			wantOrigURL:    "https://example.com",
+			wantUserID:     1,
+			wantFindCalled: true,
+			wantSet:        true,
+			wantPublish:    false,
 		},
 		{
 			name:           "link doesn't exist",
 			shortCode:      "nope",
 			repo:           &mockLinkRepo{},
 			cache:          &mockLinkCache{},
+			queue:          &mockQueue{},
 			wantErr:        "link not found",
 			wantFindCalled: true,
 		},
@@ -119,6 +180,7 @@ func TestResolveShortLink(t *testing.T) {
 				),
 			},
 			cache:          &mockLinkCache{},
+			queue:          &mockQueue{},
 			wantErr:        "link is not available",
 			wantFindCalled: true,
 		},
@@ -132,6 +194,7 @@ func TestResolveShortLink(t *testing.T) {
 				),
 			},
 			cache:          &mockLinkCache{},
+			queue:          &mockQueue{},
 			wantErr:        "link is not available",
 			wantFindCalled: true,
 		},
@@ -142,6 +205,7 @@ func TestResolveShortLink(t *testing.T) {
 				findByShortCodeErr: repoErr,
 			},
 			cache:          &mockLinkCache{},
+			queue:          &mockQueue{},
 			wantErr:        "repository failed",
 			wantFindCalled: true,
 		},
@@ -150,6 +214,7 @@ func TestResolveShortLink(t *testing.T) {
 			shortCode:      "",
 			repo:           &mockLinkRepo{},
 			cache:          &mockLinkCache{},
+			queue:          &mockQueue{},
 			wantErr:        "short code cannot be empty",
 			wantFindCalled: false,
 		},
@@ -162,7 +227,12 @@ func TestResolveShortLink(t *testing.T) {
 				cache = tt.cache
 			}
 
-			uc := NewResolveShortLinkUseCase(tt.repo, cache)
+			var queue messagequeue.Rabbitmq
+			if tt.queue != nil {
+				queue = tt.queue
+			}
+
+			uc := NewResolveShortLinkUseCase(tt.repo, cache, queue)
 
 			link, err := uc.ResolveShortLink(tt.shortCode)
 
@@ -178,6 +248,9 @@ func TestResolveShortLink(t *testing.T) {
 				}
 				if got := link.OriginalURL(); got != tt.wantOrigURL {
 					t.Errorf("expected original url %q, got %q", tt.wantOrigURL, got)
+				}
+				if got := link.UserID(); got != tt.wantUserID {
+					t.Errorf("expected user id %d, got %d", tt.wantUserID, got)
 				}
 			} else {
 				if err == nil {
@@ -196,13 +269,53 @@ func TestResolveShortLink(t *testing.T) {
 				if tt.cache.calledSet != tt.wantSet {
 					t.Errorf("expected cache.Set called = %v, got %v", tt.wantSet, tt.cache.calledSet)
 				}
-				if tt.wantSetURL != "" && tt.cache.setURL != tt.wantSetURL {
-					t.Errorf("expected cache.Set url %q, got %q", tt.wantSetURL, tt.cache.setURL)
+				if tt.wantSet && tt.cache.setLink != nil {
+					if tt.cache.setLink.ShortCode() != tt.shortCode {
+						t.Errorf("expected cache.Set short code %q, got %q", tt.shortCode, tt.cache.setLink.ShortCode())
+					}
+					if tt.cache.setLink.OriginalURL() != tt.wantOrigURL {
+						t.Errorf("expected cache.Set url %q, got %q", tt.wantOrigURL, tt.cache.setLink.OriginalURL())
+					}
 				}
-				if tt.wantSet && tt.cache.setCode != tt.shortCode {
-					t.Errorf("expected cache.Set short code %q, got %q", tt.shortCode, tt.cache.setCode)
+			}
+
+			if tt.queue != nil {
+				if tt.queue.calledPublish != tt.wantPublish {
+					t.Errorf("expected queue.Publish called = %v, got %v", tt.wantPublish, tt.queue.calledPublish)
+				}
+				if tt.wantPublish {
+					assertClickPayload(t, tt.queue, tt.wantUserID, tt.shortCode, tt.wantOrigURL)
 				}
 			}
 		})
+	}
+}
+
+func assertClickPayload(t *testing.T, q *mockQueue, wantUserID int, wantCode, wantURL string) {
+	t.Helper()
+
+	if q.routingKey != messagequeue.RoutingKeyLinkClicked {
+		t.Errorf("expected routing key %q, got %q", messagequeue.RoutingKeyLinkClicked, q.routingKey)
+	}
+
+	var event linkDTO.LinkClickedEvent
+	if err := json.Unmarshal(q.payload, &event); err != nil {
+		t.Fatalf("invalid event payload: %v", err)
+	}
+
+	if event.EventID == "" {
+		t.Error("expected event_id to be set")
+	}
+	if event.UserID != wantUserID {
+		t.Errorf("expected user_id %d, got %d", wantUserID, event.UserID)
+	}
+	if event.ShortCode != wantCode {
+		t.Errorf("expected short_code %q, got %q", wantCode, event.ShortCode)
+	}
+	if event.OriginalURL != wantURL {
+		t.Errorf("expected original_url %q, got %q", wantURL, event.OriginalURL)
+	}
+	if event.ClickedAt.IsZero() {
+		t.Error("expected clicked_at to be set")
 	}
 }

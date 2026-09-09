@@ -14,7 +14,7 @@ func newLinkWithState(
 	isActive bool,
 	expiresAt *time.Time,
 ) *entities.Link {
-	link, err := entities.NewLinkFromDatabase(
+	link, err := entities.NewLinkWithState(
 		&id,
 		userID,
 		originalURL,

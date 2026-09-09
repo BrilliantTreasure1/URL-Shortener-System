@@ -162,7 +162,7 @@ func TestCreateShortLink(t *testing.T) {
 }
 
 func mustLink(id int, userID int, originalURL string, shortCode string) *entities.Link {
-	link, err := entities.NewLinkFromDatabase(
+	link, err := entities.NewLinkWithState(
 		&id,
 		userID,
 		originalURL,
