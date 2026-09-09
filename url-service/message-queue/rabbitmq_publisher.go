@@ -3,6 +3,7 @@ package messagequeue
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -12,8 +13,12 @@ var ErrQueueUnavailable = errors.New("queue is unavailable")
 
 const exchangeLinkEvents = "link.events"
 
+const publishTimeout = 1 * time.Second
+
 type RabbitmqPublisher struct {
 	connection *amqp.Connection
+	mu         sync.Mutex
+	channel    *amqp.Channel
 }
 
 func NewRabbitmqPublisher(connection *amqp.Connection) *RabbitmqPublisher {
@@ -27,29 +32,36 @@ func (p *RabbitmqPublisher) Publish(routingKey string, payload []byte) error {
 		return ErrQueueUnavailable
 	}
 
-	channel, err := p.connection.Channel()
-	if err != nil {
-		return err
-	}
-	defer channel.Close()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	err = channel.ExchangeDeclare(
-		exchangeLinkEvents,
-		"topic",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		return err
+	if p.channel == nil {
+		channel, err := p.connection.Channel()
+		if err != nil {
+			return err
+		}
+
+		err = channel.ExchangeDeclare(
+			exchangeLinkEvents,
+			"topic",
+			true,
+			false,
+			false,
+			false,
+			nil,
+		)
+		if err != nil {
+			channel.Close()
+			return err
+		}
+
+		p.channel = channel
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), publishTimeout)
 	defer cancel()
 
-	err = channel.PublishWithContext(
+	err := p.channel.PublishWithContext(
 		ctx,
 		exchangeLinkEvents,
 		routingKey,
