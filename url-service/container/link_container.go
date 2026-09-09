@@ -9,9 +9,11 @@ import (
 	controllerLink "url-shortener/controller/link"
 	repositoryLink "url-shortener/repository/link"
 	repositoryCache "url-shortener/repository/cache"
+	messagequeue "url-shortener/message-queue"
 	"url-shortener/service/shortcode-generator"
 
 	"github.com/redis/go-redis/v9"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type LinkContainer struct {
@@ -21,12 +23,13 @@ type LinkContainer struct {
 	DisableLinkController *controllerLink.DisableLinkController
 }
 
-func NewLinkContainer(db *sql.DB, redisClient *redis.Client, cacheTTL time.Duration) (*LinkContainer, error) {
+func NewLinkContainer(db *sql.DB, redisClient *redis.Client, rabbitMQConnection *amqp.Connection, cacheTTL time.Duration) (*LinkContainer, error) {
 
 	linkRepository := repositoryLink.NewLinkRepositoryPostgresql(db)
 	shortcodeGenerator := shortcodegenerator.NewUniqueGenerator()
 
 	linkCache := repositoryCache.NewRedisLinkCache(redisClient, cacheTTL)
+	queue := messagequeue.NewRabbitmqPublisher(rabbitMQConnection)
 
 	createShortLinkUseCase := applicationLink.NewCreateShortLinkUseCase(
 		shortcodeGenerator,
@@ -40,6 +43,7 @@ func NewLinkContainer(db *sql.DB, redisClient *redis.Client, cacheTTL time.Durat
 	resolveShortLinkUseCase := applicationLink.NewResolveShortLinkUseCase(
 		linkRepository,
 		linkCache,
+		queue,
 	)
 
 	resolveLinkController := controllerLink.NewResolveLinkController(

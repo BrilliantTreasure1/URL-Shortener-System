@@ -7,12 +7,14 @@ import (
 	"url-shortener/database"
 
 	"github.com/redis/go-redis/v9"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type Container struct {
 	User  *UserContainer
 	Link  *LinkContainer
 	Redis *redis.Client
+	MQ    *amqp.Connection
 }
 
 func NewContainer() (*Container, error) {
@@ -33,12 +35,18 @@ func NewContainer() (*Container, error) {
 		redisClient = nil
 	}
 
+	rabbitMQConnection, err := config.NewRabbitMQConnection()
+	if err != nil {
+		log.Printf("warn: rabbitmq unavailable, continuing without queue: %v", err)
+		rabbitMQConnection = nil
+	}
+
 	userContainer, err := NewUserContainer(db)
 	if err != nil {
 		return nil, err
 	}
 
-	linkContainer, err := NewLinkContainer(db, redisClient, config.NewCacheTTL())
+	linkContainer, err := NewLinkContainer(db, redisClient, rabbitMQConnection, config.NewCacheTTL())
 	if err != nil {
 		return nil, err
 	}
@@ -47,5 +55,16 @@ func NewContainer() (*Container, error) {
 		User:  userContainer,
 		Link:  linkContainer,
 		Redis: redisClient,
+		MQ:    rabbitMQConnection,
 	}, nil
+}
+
+func (c *Container) Close() {
+	if c.MQ != nil {
+		c.MQ.Close()
+	}
+
+	if c.Redis != nil {
+		c.Redis.Close()
+	}
 }
