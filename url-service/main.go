@@ -14,6 +14,7 @@ func main() {
 	if err != nil {
 		log.Fatal("failed to initialize application:", err)
 	}
+	defer app.Close()
 
 	router := gin.Default()
 
