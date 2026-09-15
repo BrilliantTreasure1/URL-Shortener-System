@@ -42,11 +42,11 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 5s
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/127.0.0.1/5672' && rabbitmq-diagnostics -q ping"]
+      interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 15s
+      start_period: 45s
 
   url-service:
     build:
