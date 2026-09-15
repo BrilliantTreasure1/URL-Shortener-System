@@ -11,10 +11,11 @@ import (
 )
 
 type Container struct {
-	User  *UserContainer
-	Link  *LinkContainer
-	Redis *redis.Client
-	MQ    *amqp.Connection
+	User   *UserContainer
+	Link   *LinkContainer
+	Report *ReportContainer
+	Redis  *redis.Client
+	MQ     *amqp.Connection
 }
 
 func NewContainer() (*Container, error) {
@@ -51,11 +52,17 @@ func NewContainer() (*Container, error) {
 		return nil, err
 	}
 
+	reportContainer, err := NewReportContainer(db)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Container{
-		User:  userContainer,
-		Link:  linkContainer,
-		Redis: redisClient,
-		MQ:    rabbitMQConnection,
+		User:   userContainer,
+		Link:   linkContainer,
+		Report: reportContainer,
+		Redis:  redisClient,
+		MQ:     rabbitMQConnection,
 	}, nil
 }
 
