@@ -131,6 +131,8 @@ services:
     volumes:
       - ./resolve/resolve_load_test.js:/scripts/resolve_load_test.js
     command: run /scripts/resolve_load_test.js
+    depends_on:
+      - url-service
 
 volumes:
   postgres_perf:
