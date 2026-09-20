@@ -1,0 +1,138 @@
+name: url-shortener-perf
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: url-shortener-perf-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: test_api
+    ports:
+      - "15432:5432"
+    volumes:
+      - postgres_perf:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d test_api"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  redis:
+    image: redis:7-alpine
+    container_name: url-shortener-perf-redis
+    command: ["redis-server", "--requirepass", "redis"]
+    ports:
+      - "16379:6379"
+    volumes:
+      - redis_perf:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: url-shortener-perf-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: rabbitmq
+      RABBITMQ_DEFAULT_PASS: rabbitmq
+    ports:
+      - "25672:5672"
+      - "15673:15672"
+    volumes:
+      - rabbitmq_perf:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/127.0.0.1/5672' && rabbitmq-diagnostics -q ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  url-service:
+    build:
+      context: ../url-service
+    container_name: url-shortener-perf-url-service
+    environment:
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: test_api
+      REDISHOST: redis
+      REDISPORT: "6379"
+      REDISPASSWORD: redis
+      RABBITMQUSER: rabbitmq
+      RABBITMQPASSWORD: rabbitmq
+      RABBITMQHOST: rabbitmq
+      RABBITMQPORT: "5672"
+      JWT_SECRET: change-me-in-prod
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1G
+
+  analytics-service:
+    build:
+      context: ../analytics-service
+    container_name: url-shortener-perf-analytics-service
+    environment:
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: test_api
+      RABBITMQUSER: rabbitmq
+      RABBITMQPASSWORD: rabbitmq
+      RABBITMQHOST: rabbitmq
+      RABBITMQPORT: "5672"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  k6:
+    image: grafana/k6:latest
+    container_name: url-shortener-perf-k6
+    volumes:
+      - ./resolve/resolve_load_test.js:/scripts/resolve_load_test.js
+    command: run /scripts/resolve_load_test.js
+
+volumes:
+  postgres_perf:
+  redis_perf:
+  rabbitmq_perf:
