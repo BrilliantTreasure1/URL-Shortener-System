@@ -6,6 +6,7 @@ import (
 	"url-shortener/application/link"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel"
 )
 
 type ResolveLinkController struct {
@@ -20,9 +21,12 @@ func NewResolveLinkController(linkUsecase link.ResolveShortLinkUseCase) *Resolve
 
 func (rl *ResolveLinkController) Resolve(c *gin.Context) {
 
+	ctx, span := otel.Tracer("resolve").Start(c.Request.Context(), "controller.resolve")
+	defer span.End()
+
 	shortCode := c.Param("short_code")
 
-	link, err := rl.linkUsecase.ResolveShortLink(shortCode)
+	link, err := rl.linkUsecase.ResolveShortLink(ctx, shortCode)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": err.Error(),

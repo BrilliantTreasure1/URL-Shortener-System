@@ -1,11 +1,14 @@
 package link
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 
 	linkDTO "url-shortener/application/link/dto"
 	entities "url-shortener/entities/link"
@@ -28,23 +31,37 @@ func NewResolveShortLinkUseCase(linkRepo linkRepo.LinkRepository, cache linkCach
 	}
 }
 
-func (r *ResolveShortLinkUseCase) ResolveShortLink(shortCode string) (*entities.Link, error) {
+func (r *ResolveShortLinkUseCase) ResolveShortLink(ctx context.Context, shortCode string) (*entities.Link, error) {
 
 	if shortCode == "" {
 		return nil, errors.New("short code cannot be empty")
 	}
 
+	tracer := otel.Tracer("resolve")
+
+	ucctx, span := tracer.Start(ctx, "usecase.resolve")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("short_code", shortCode))
+
 	if r.cache != nil {
+		_, cacheSpan := tracer.Start(ucctx, "cache.get")
 		cachedLink, found, err := r.cache.Get(shortCode)
+		cacheSpan.SetAttributes(attribute.Bool("cache.hit", err == nil && found))
+		cacheSpan.End()
+
 		if err == nil && found {
 			if cachedLink.IsAvailable(time.Now()) {
-				r.publishClickEvent(cachedLink)
+				r.publishClickEvent(ucctx, cachedLink)
 				return cachedLink, nil
 			}
 		}
 	}
 
+	_, dbSpan := tracer.Start(ucctx, "repo.find-by-short-code")
 	link, err := r.linkRepo.FindByShortCode(shortCode)
+	dbSpan.End()
+
 	if err != nil {
 		return nil, err
 	}
@@ -58,18 +75,23 @@ func (r *ResolveShortLinkUseCase) ResolveShortLink(shortCode string) (*entities.
 	}
 
 	if r.cache != nil {
+		_, setSpan := tracer.Start(ucctx, "cache.set")
 		_ = r.cache.Set(link)
+		setSpan.End()
 	}
 
-	r.publishClickEvent(link)
+	r.publishClickEvent(ucctx, link)
 
 	return link, nil
 }
 
-func (r *ResolveShortLinkUseCase) publishClickEvent(link *entities.Link) {
+func (r *ResolveShortLinkUseCase) publishClickEvent(ctx context.Context, link *entities.Link) {
 	if r.queue == nil {
 		return
 	}
+
+	_, span := otel.Tracer("resolve").Start(ctx, "queue.publish")
+	defer span.End()
 
 	payload, err := json.Marshal(linkDTO.LinkClickedEvent{
 		EventID:     uuid.NewString(),
@@ -84,5 +106,3 @@ func (r *ResolveShortLinkUseCase) publishClickEvent(link *entities.Link) {
 
 	_ = r.queue.Publish(messagequeue.RoutingKeyLinkClicked, payload)
 }
-
-
