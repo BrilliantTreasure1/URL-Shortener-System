@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -11,9 +12,15 @@ import (
 	entities "url-shortener/entities/link"
 )
 
+var redisReconnectCooldown = 30 * time.Second
+
 type RedisLinkCache struct {
 	client *redis.Client
 	ttl    time.Duration
+
+	mu         sync.Mutex
+	disabled   bool
+	disabledAt time.Time
 }
 
 type cachedLink struct {
@@ -33,8 +40,32 @@ func NewRedisLinkCache(client *redis.Client, ttl time.Duration) *RedisLinkCache 
 	}
 }
 
+func (r *RedisLinkCache) allowAttempt() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if !r.disabled {
+		return true
+	}
+
+	if time.Since(r.disabledAt) >= redisReconnectCooldown {
+		r.disabled = false
+		return true
+	}
+
+	return false
+}
+
+func (r *RedisLinkCache) trip() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.disabled = true
+	r.disabledAt = time.Now()
+}
+
 func (r *RedisLinkCache) Get(shortCode string) (*entities.Link, bool, error) {
-	if r.client == nil {
+	if r.client == nil || !r.allowAttempt() {
 		return nil, false, ErrCacheUnavailable
 	}
 
@@ -43,6 +74,7 @@ func (r *RedisLinkCache) Get(shortCode string) (*entities.Link, bool, error) {
 		return nil, false, nil
 	}
 	if err != nil {
+		r.trip()
 		return nil, false, ErrCacheUnavailable
 	}
 
@@ -65,7 +97,7 @@ func (r *RedisLinkCache) Get(shortCode string) (*entities.Link, bool, error) {
 }
 
 func (r *RedisLinkCache) Set(link *entities.Link) error {
-	if r.client == nil {
+	if r.client == nil || !r.allowAttempt() {
 		return ErrCacheUnavailable
 	}
 
@@ -83,6 +115,7 @@ func (r *RedisLinkCache) Set(link *entities.Link) error {
 	}
 
 	if err := r.client.Set(context.Background(), cacheKeyPrefix+link.ShortCode(), val, r.ttl).Err(); err != nil {
+		r.trip()
 		return fmt.Errorf("cache set failed: %w", err)
 	}
 
@@ -90,11 +123,12 @@ func (r *RedisLinkCache) Set(link *entities.Link) error {
 }
 
 func (r *RedisLinkCache) Delete(shortCode string) error {
-	if r.client == nil {
+	if r.client == nil || !r.allowAttempt() {
 		return ErrCacheUnavailable
 	}
 
 	if err := r.client.Del(context.Background(), cacheKeyPrefix+shortCode).Err(); err != nil {
+		r.trip()
 		return fmt.Errorf("cache delete failed: %w", err)
 	}
 
