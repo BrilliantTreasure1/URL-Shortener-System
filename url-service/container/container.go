@@ -8,6 +8,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 type Container struct {
@@ -16,6 +18,9 @@ type Container struct {
 	Report *ReportContainer
 	Redis  *redis.Client
 	MQ     *amqp.Connection
+	Tracer *sdktrace.TracerProvider
+
+	shutdownTelemetry func()
 }
 
 func NewContainer() (*Container, error) {
@@ -42,6 +47,18 @@ func NewContainer() (*Container, error) {
 		rabbitMQConnection = nil
 	}
 
+	var traceProvider *sdktrace.TracerProvider
+	var telemetryShutdown func()
+
+	provider, shutdown, err := config.NewTraceProvider()
+	if err != nil {
+		log.Printf("warn: tracing unavailable, continuing without traces: %v", err)
+	} else {
+		traceProvider = provider
+		telemetryShutdown = shutdown
+		otel.SetTracerProvider(provider)
+	}
+
 	userContainer, err := NewUserContainer(db)
 	if err != nil {
 		return nil, err
@@ -58,11 +75,13 @@ func NewContainer() (*Container, error) {
 	}
 
 	return &Container{
-		User:   userContainer,
-		Link:   linkContainer,
-		Report: reportContainer,
-		Redis:  redisClient,
-		MQ:     rabbitMQConnection,
+		User:              userContainer,
+		Link:              linkContainer,
+		Report:            reportContainer,
+		Redis:             redisClient,
+		MQ:                rabbitMQConnection,
+		Tracer:            traceProvider,
+		shutdownTelemetry: telemetryShutdown,
 	}, nil
 }
 
@@ -73,5 +92,9 @@ func (c *Container) Close() {
 
 	if c.Redis != nil {
 		c.Redis.Close()
+	}
+
+	if c.shutdownTelemetry != nil {
+		c.shutdownTelemetry()
 	}
 }
