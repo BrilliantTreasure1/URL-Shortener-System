@@ -23,8 +23,12 @@ func NewCacheTTL() time.Duration {
 func NewRedisClient() (*redis.Client, error) {
 
 	client := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%s", getEnv("REDISHOST", "localhost"), getEnv("REDISPORT", "6379")),
-		Password: getEnv("REDISPASSWORD", "redis"),
+		Addr:         fmt.Sprintf("%s:%s", getEnv("REDISHOST", "localhost"), getEnv("REDISPORT", "6379")),
+		Password:     getEnv("REDISPASSWORD", "redis"),
+		MaxRetries:   -1,
+		DialTimeout:  2 * time.Second,
+		ReadTimeout:  1 * time.Second,
+		WriteTimeout: 1 * time.Second,
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
