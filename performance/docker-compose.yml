@@ -65,6 +65,21 @@ services:
           cpus: "0.5"
           memory: 512M
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    container_name: url-shortener-perf-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
   url-service:
     build:
       context: ../url-service
@@ -83,6 +98,8 @@ services:
       RABBITMQHOST: rabbitmq
       RABBITMQPORT: "5672"
       JWT_SECRET: change-me-in-prod
+      OTEL_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      OTEL_SERVICE_NAME: url-service
     ports:
       - "8081:8080"
     depends_on:
@@ -92,6 +109,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      jaeger:
+        condition: service_started
     restart: unless-stopped
     deploy:
       resources:
