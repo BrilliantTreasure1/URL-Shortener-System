@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -28,6 +29,11 @@ func NewDatabase() (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
+
+	db.SetMaxOpenConns(20)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(2 * time.Minute)
+	db.SetConnMaxIdleTime(1 * time.Minute)
 
 	return db, nil
 }
