@@ -2,6 +2,7 @@ package container
 
 import (
 	"log"
+	"time"
 
 	"url-shortener/config"
 	"url-shortener/database"
@@ -11,11 +12,12 @@ import (
 )
 
 type Container struct {
-	User   *UserContainer
-	Link   *LinkContainer
-	Report *ReportContainer
-	Redis  *redis.Client
-	MQ     *amqp.Connection
+	User             *UserContainer
+	Link             *LinkContainer
+	Report           *ReportContainer
+	Redis            *redis.Client
+	MQ               *amqp.Connection
+	shutdownPoolStats func()
 }
 
 func NewContainer() (*Container, error) {
@@ -29,6 +31,9 @@ func NewContainer() (*Container, error) {
 		db.Close()
 		return nil, err
 	}
+
+	poolStatsStop := make(chan struct{})
+	database.StartPoolStatsLogger(db, 30*time.Second, poolStatsStop)
 
 	redisClient, err := config.NewRedisClient()
 	if err != nil {
@@ -58,11 +63,12 @@ func NewContainer() (*Container, error) {
 	}
 
 	return &Container{
-		User:   userContainer,
-		Link:   linkContainer,
-		Report: reportContainer,
-		Redis:  redisClient,
-		MQ:     rabbitMQConnection,
+		User:              userContainer,
+		Link:              linkContainer,
+		Report:            reportContainer,
+		Redis:             redisClient,
+		MQ:                rabbitMQConnection,
+		shutdownPoolStats: func() { close(poolStatsStop) },
 	}, nil
 }
 
@@ -73,5 +79,9 @@ func (c *Container) Close() {
 
 	if c.Redis != nil {
 		c.Redis.Close()
+	}
+
+	if c.shutdownPoolStats != nil {
+		c.shutdownPoolStats()
 	}
 }
