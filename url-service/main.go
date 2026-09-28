@@ -16,7 +16,8 @@ func main() {
 	}
 	defer app.Close()
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery(), middleware.RequestLog())
 
 	router.POST(
 		"/users/register",
