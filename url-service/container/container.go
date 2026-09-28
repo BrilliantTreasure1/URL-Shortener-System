@@ -2,6 +2,7 @@ package container
 
 import (
 	"log"
+	"time"
 
 	"url-shortener/config"
 	"url-shortener/database"
@@ -21,6 +22,7 @@ type Container struct {
 	Tracer *sdktrace.TracerProvider
 
 	shutdownTelemetry func()
+	shutdownPoolStats  func()
 }
 
 func NewContainer() (*Container, error) {
@@ -34,6 +36,9 @@ func NewContainer() (*Container, error) {
 		db.Close()
 		return nil, err
 	}
+
+	poolStatsStop := make(chan struct{})
+	database.StartPoolStatsLogger(db, 30*time.Second, poolStatsStop)
 
 	redisClient, err := config.NewRedisClient()
 	if err != nil {
@@ -82,6 +87,7 @@ func NewContainer() (*Container, error) {
 		MQ:                rabbitMQConnection,
 		Tracer:            traceProvider,
 		shutdownTelemetry: telemetryShutdown,
+		shutdownPoolStats: func() { close(poolStatsStop) },
 	}, nil
 }
 
@@ -96,5 +102,9 @@ func (c *Container) Close() {
 
 	if c.shutdownTelemetry != nil {
 		c.shutdownTelemetry()
+	}
+
+	if c.shutdownPoolStats != nil {
+		c.shutdownPoolStats()
 	}
 }
