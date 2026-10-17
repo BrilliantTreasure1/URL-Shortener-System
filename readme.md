@@ -22,7 +22,9 @@ Both services share a single PostgreSQL database and talk to each other **only**
 - [API Reference](#api-reference)
 - [Configuration](#configuration)
 - [How to Run](#how-to-run)
+- [Performance](#performance)
 - [Local Development & Testing](#local-development--testing)
+- [Documentation](#documentation)
 - [Known Gaps & Roadmap](#known-gaps--roadmap)
 
 ---
@@ -69,6 +71,9 @@ URL SHORTENER — DATA FLOW
 | Cache                  | Redis 7 (go-redis v9)               | `url-service/repository/cache`         |
 | Message broker         | RabbitMQ 3 (amqp091-go) **topic exchange** | `*/message-queue`                      |
 | DB migrations          | Idempotent DDL at startup (no tool)  | `*/database/migrate.go`                |
+| Observability          | OpenTelemetry SDK (OTLP/HTTP) → Jaeger | `url-service/config/telemetry.go`, `performance/` |
+| Load balancing         | Nginx 1.27 (upstream keepalive)  | `performance/gateway/nginx.conf`       |
+| Load testing           | k6 (constant-arrival-rate)       | `performance/resolve`                  |
 
 ---
 
@@ -123,6 +128,9 @@ Everything is environment-driven and **degrades instead of failing fast** when a
 - **RabbitMQ** — optional with a bounded retry: 5s dial timeout, up to **15 attempts × 3s delay (~45s window)**, then degrades to `nil` (publisher stays usable, publishes return `ErrQueueUnavailable`; the consumer disables itself). There is **no runtime auto-reconnect** — this is a deliberate scope decision (see Roadmap).
 - **Startup ordering (Docker Compose)** — both services wait on the `rabbitmq` **healthcheck** (`</dev/tcp` + `rabbitmq-diagnostics ping`, `start_period: 45s`) so the compose-managed boot-race is avoided.
 - **Publish failures during resolve** are non-blocking: the redirect still succeeds, the event is dropped (loss is acceptable per design).
+- **Redis circuit breaker** — a failed cache operation trips a **30-second cooldown** (`redisReconnectCooldown`) that short-circuits further cache calls before auto re-enabling, preventing retry storms against a down cache.
+- **Database pool** — bounded (max-open 20 / max-idle 10 / lifetime 2m / idle 1m) so load queues in the app rather than saturating PostgreSQL; pool stats (`Open/InUse/Idle/WaitCount`) are logged periodically.
+- **Low-overhead logging** — only responses with status ≥ 400 are logged, keeping logging cost negligible under load.
 
 ---
 
@@ -189,6 +197,11 @@ All three aggregates are computed in **a single `SELECT`** with scalar subquerie
 .
 ├── deployment/
 │   └── docker-compose.yml        # Postgres + Redis + RabbitMQ + both services
+├── performance/                  # isolated load-testing stack (compose project: url-shortener-perf)
+│   ├── docker-compose.yml        # 3× url-service + Nginx gateway + Jaeger + k6, resource-capped
+│   ├── gateway/nginx.conf        # load balancer: upstream replicas, keepalive, access_log off
+│   ├── resolve/                  # k6 resolve load test + performance articles (doc/)
+│   └── test_contract.md          # version under test + per-service resource table
 ├── url-service/                  # module: url-shortener
 │   ├── main.go                   # wiring, routes, graceful shutdown
 │   ├── Dockerfile
@@ -283,6 +296,8 @@ All settings come from environment variables, with sane local defaults.
 | url-service      | `REDISHOST/REDISPORT/REDISPASSWORD` | `localhost/6379/redis` | — |
 | both             | `RABBITMQUSER/RABBITMQPASSWORD/RABBITMQHOST/RABBITMQPORT/RABBITMQVHOST` | `guest/guest/localhost/5672/` | retry 15×3s |
 | url-service      | `CACHETTL`      | `3600` (seconds)    | resolve-cache TTL              |
+| url-service      | `OTEL_OTLP_ENDPOINT` | `http://localhost:4318/v1/traces` | OTLP/HTTP trace export (optional) |
+| url-service      | `OTEL_SERVICE_NAME`  | `url-service`       | `service.name` trace resource  |
 
 ---
 
@@ -335,6 +350,58 @@ curl -s  $BASE/reports/overview -H "Authorization: Bearer $TOKEN"
 
 ---
 
+## Performance
+
+The services are load-tested in an **isolated, containerized stack** under `performance/`
+(compose project `url-shortener-perf`), so benchmark runs never touch development data. The
+current setup runs **three `url-service` replicas behind an Nginx load balancer**, with k6 as the
+load generator and Jaeger for request tracing.
+
+```text
+k6  →  Nginx gateway (:8081)  →  url-service ×3  →  PostgreSQL / Redis
+                                         │
+                                         └── OTLP traces → Jaeger (:16686)
+```
+
+### Latest baseline (v1.4.1)
+
+With three replicas behind Nginx, the resolve endpoint sustained **10,000 RPS at a 0.00% error
+rate**. Horizontal scaling moved the ceiling well beyond the single-instance baseline.
+
+| RPS | P50 | P90 | P99 | Errors |
+|---:|---:|---:|---:|---:|
+| 7,000 | 865.57 µs | 1.22 ms | **46.88 ms** | 0.00% |
+| 8,000 | 943.17 µs | 9.06 ms | 66.59 ms | 0.00% |
+| 9,000 | 33.73 ms | 95.76 ms | 156.76 ms | 0.00% |
+| 10,000 | 77.22 ms | 136.20 ms | 170.34 ms | 0.00% |
+
+At 7,000 RPS the P99 latency dropped from **1.76 s** with a single instance (`001`) to
+**46.88 ms** here (`002`). Latency starts climbing sharply around 9,000 RPS, so the next step is
+probing beyond 10,000 RPS to locate the new ceiling.
+
+### Running the load test
+
+```bash
+cd performance
+docker compose up -d --build --scale url-service=3
+docker compose run --rm k6
+```
+
+Jaeger UI: <http://localhost:16686> · Through the load balancer: <http://localhost:8081>
+
+### Further reading
+
+The full methodology, resource contract, and results live in [`performance/`](performance/README.md):
+
+- [`performance/test_contract.md`](performance/test_contract.md) — version under test and per-service resource limits
+- [`performance/resolve/doc/001-resolve-performance-test.md`](performance/resolve/doc/001-resolve-performance-test.md) — single-instance baseline (1,000–7,000 RPS)
+- [`performance/resolve/doc/002-resolve-performance-test.md`](performance/resolve/doc/002-resolve-performance-test.md) — horizontal scaling with Nginx (1,000–10,000 RPS)
+
+New here? Start with these documents to understand how the numbers were produced and how to
+reproduce them.
+
+---
+
 ## Local Development & Testing
 
 Both modules target Go 1.25 locally; commands are run from each service directory.
@@ -353,11 +420,26 @@ GOTOOLCHAIN=go1.25.0 go test ./...
 
 ---
 
+## Documentation
+
+- [README](readme.md) — architecture, API reference, and project conventions (this document).
+- [Performance testing](performance/README.md) — reproducible load-testing setup and baselines.
+  - [Test contract](performance/test_contract.md) — version under test + resource budget.
+  - [001 — single-instance baseline](performance/resolve/doc/001-resolve-performance-test.md).
+  - [002 — horizontal scaling with Nginx](performance/resolve/doc/002-resolve-performance-test.md).
+
+If you are contributing to performance work, please read the test contract first — it defines the
+fixed environment that makes results comparable across runs.
+
+---
+
 ## Known Gaps & Roadmap
 
 Deliberate scope decisions and the next things worth building:
 
-1. **Observability** — no `/metrics`, structured logs, or tracing yet. Priorities: resolve hit-rate / cache-miss / degraded counters, consumer lag (`RabbitMQ management API`), and a small Prometheus endpoint.
+1. **Observability** — request tracing is already in place (OpenTelemetry SDK → Jaeger; see
+   [Performance](#performance)). Still missing: a Prometheus `/metrics` endpoint, structured
+   logs, and consumer-lag visibility (RabbitMQ management API).
 2. **RabbitMQ resilience** — startup retry only; no runtime auto-reconnect or publisher-confirms. Add connection monitoring + channel recovery for long-lived deploys.
 3. **Secrets** — `JWT_SECRET` is a placeholder. Move to secrets injection (docker secrets / vault).
 4. **Migrations** — current DDL is app-start idempotent; adopt a versioned migration tool (golang-migrate) for many environments.
