@@ -30,6 +30,9 @@ Both services share a single PostgreSQL database and talk to each other **only**
 ---
 
 ## Architecture
+
+[![Architecture diagram](https://gitdiagram.com/diagram-badge.svg)](https://gitdiagram.com/brillianttreasure1/url-shortener-system?utm_source=readme&utm_medium=badge)
+
 ```text
 URL SHORTENER — DATA FLOW
 
