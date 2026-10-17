@@ -6,7 +6,7 @@ export const options = {
   scenarios: {
     resolve_load: {
       executor: 'constant-arrival-rate',
-      rate: 1000,
+      rate: 10000,
       timeUnit: '1s',
       duration: '1m',
       preAllocatedVUs: 1000,
@@ -17,7 +17,7 @@ export const options = {
 };
 
 export default function () {
-  const res = http.get('http://url-service:8080/1J9Mt4');
+  const res = http.get('http://gateway/1J9Mt4');
   check(res, {
     'status is 302': (r) => r.status === 302,
   });

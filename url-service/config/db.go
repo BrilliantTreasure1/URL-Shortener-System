@@ -30,9 +30,9 @@ func NewDatabase() (*sql.DB, error) {
 		return nil, err
 	}
 
-	db.SetMaxOpenConns(20)
+	db.SetMaxOpenConns(20)                      // سقف همزمانی → صف در app، نه غرق شدن postgres
 	db.SetMaxIdleConns(10)
-	db.SetConnMaxLifetime(2 * time.Minute)
+	db.SetConnMaxLifetime(2 * time.Minute)      // چرخش اتصال
 	db.SetConnMaxIdleTime(1 * time.Minute)
 
 	return db, nil

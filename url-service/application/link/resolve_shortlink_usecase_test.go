@@ -1,6 +1,7 @@
 package link
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -234,7 +235,7 @@ func TestResolveShortLink(t *testing.T) {
 
 			uc := NewResolveShortLinkUseCase(tt.repo, cache, queue)
 
-			link, err := uc.ResolveShortLink(tt.shortCode)
+			link, err := uc.ResolveShortLink(context.Background(), tt.shortCode)
 
 			if tt.wantErr == "" {
 				if err != nil {
