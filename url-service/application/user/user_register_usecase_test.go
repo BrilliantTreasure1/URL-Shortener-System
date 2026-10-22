@@ -148,11 +148,22 @@ func TestRegisterUseCase(t *testing.T) {
 			wantErr:            "phone number is too short",
 			wantRegisterCalled: false,
 		},
-		// NOTE: entities.NewUser also rejects passwords shorter than 8 characters,
-		// but RegisterUseCase bcrypt-hashes the password *before* building the
-		// entity. The validation therefore runs against the ~60-character hash and
-		// can never fail on the register path, so it is not exercised here. The
-		// rule is observable only through entities.NewUser itself.
+		{
+			name:     "password too short",
+			username: "johndoe",
+			email:    "john@example.com",
+			phone:    "09123456789",
+			password: "short",
+
+			findUser: nil,
+			findErr:  nil,
+
+			registerUser: nil,
+			registerErr:  nil,
+
+			wantErr:            "password too short",
+			wantRegisterCalled: false,
+		},
 	}
 
 	for _, tt := range tests {
