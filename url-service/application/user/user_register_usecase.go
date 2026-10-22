@@ -35,6 +35,10 @@ func (r *RegisterUseCase) Register(
 		return nil , errors.New("user already registered")
 	}
 
+	if _, validationErr := entities.NewUser(nil, username, email, phoneNumber, password); validationErr != nil {
+		return nil, validationErr
+	}
+
 	hash , err := bcrypt.GenerateFromPassword([]byte(password),bcrypt.DefaultCost)
 
 	if err != nil {
