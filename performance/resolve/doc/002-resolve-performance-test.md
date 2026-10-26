@@ -105,3 +105,40 @@ These results indicate that adding service instances behind Nginx significantly 
 Horizontal scaling with three `url-service` instances behind Nginx enabled the resolve endpoint to reach **10,000 RPS with a reported error rate of 0.00%**.
 
 The next step is to continue testing at higher request rates to identify the system's new performance limits and observe how latency and error rates change under additional load.
+
+## 8. Extended Load Test
+
+After successfully reaching 10,000 RPS, I continued testing to determine how the system behaved under additional load.
+
+The request rate did not increase beyond approximately 13,000 RPS because the `url-service` instances and Nginx were reaching resource saturation. Meanwhile, Redis and PostgreSQL still had available capacity.
+
+The following results were recorded at 10,000, 11,000, and 12,000 RPS:
+
+| RPS | P50 | P90 | P99 | Error Rate |
+|---:|---:|---:|---:|---:|
+| 10,000 | 74.55 ms | 130.78 ms | 168.28 ms | 0.00% |
+| 11,000 | 100.16 ms | 160.73 ms | 210.26 ms | 0.00% |
+| 12,000 | 126.79 ms | 201.50 ms | 328.81 ms | 0.00% |
+
+As the request rate increased, latency rose across all three percentiles. Although the reported error rate remained at 0.00%, the increasing latency and resource saturation indicate that the current architecture is approaching its practical capacity under this test configuration.
+
+## 9. Bottleneck Analysis
+
+The tests indicate that the current bottlenecks are concentrated in the application layer and the Nginx gateway rather than in Redis or PostgreSQL.
+
+The main observations are:
+
+- **Application instances:** The three `url-service` instances are reaching resource saturation.
+- **Nginx gateway:** Nginx is also reaching resource saturation while handling incoming traffic and distributing requests.
+- **Redis and PostgreSQL:** Both components still have available resources, suggesting that they are not the primary bottlenecks observed in these tests.
+- **Latency:** P50, P90, and P99 increase as the request rate rises, even though no errors were reported.
+
+These observations suggest that further increases in request rate may require optimizing the gateway and application layer before changing the database or cache infrastructure.
+
+## 10. Next Steps: Nginx Optimization and Reliability
+
+At this stage, I am pausing higher-RPS experiments to focus on improving the Nginx load balancer and making the overall system more reliable.
+
+The next phase will focus on reviewing the gateway configuration, connection handling, upstream behavior, and failure-handling mechanisms. The goal is to improve the reliability and efficiency of traffic distribution before conducting further high-load tests.
+
+After these changes, I will document the configuration updates and compare the results to determine whether the optimizations improve system behavior under load.
