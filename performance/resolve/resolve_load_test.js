@@ -6,9 +6,9 @@ export const options = {
   scenarios: {
     resolve_load: {
       executor: 'constant-arrival-rate',
-      rate: 10000,
+      rate: 1000,
       timeUnit: '1s',
-      duration: '1m',
+      duration: '2m',
       preAllocatedVUs: 1000,
       maxVUs: 10000,
     },
@@ -17,7 +17,7 @@ export const options = {
 };
 
 export default function () {
-  const res = http.get('http://gateway/1J9Mt4');
+  const res = http.get('http://haproxy/1J9Mt4');
   check(res, {
     'status is 302': (r) => r.status === 302,
   });
