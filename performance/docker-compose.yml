@@ -123,11 +123,8 @@ services:
     cpus: "0.5"
     mem_limit: 512m
 
-  gateway:
+  gateway-active:
     image: nginx:1.27-alpine
-    container_name: url-shortener-perf-gateway
-    ports:
-      - "8081:80"
     volumes:
       - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
@@ -137,6 +134,30 @@ services:
     cpus: "2.0"
     mem_limit: 512m
 
+  gateway-standby:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      url-service:
+        condition: service_started
+    restart: unless-stopped
+    cpus: "2.0"
+    mem_limit: 512m
+
+  haproxy:
+    image: haproxy:2.9-alpine
+    ports:
+      - "8081:80"
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - gateway-active
+      - gateway-standby
+    restart: unless-stopped
+    cpus: "1.0"
+    mem_limit: 256m
+
   k6:
     image: grafana/k6:latest
     container_name: url-shortener-perf-k6
@@ -144,7 +165,7 @@ services:
       - ./resolve/resolve_load_test.js:/scripts/resolve_load_test.js
     command: run /scripts/resolve_load_test.js
     depends_on:
-      - gateway
+      - haproxy
 
 volumes:
   postgres_perf:
